@@ -2,6 +2,7 @@ import initSqlJs, { Database as SqlDatabase, SqlValue } from 'sql.js';
 import fs from 'fs';
 import path from 'path';
 import { runMigrations } from './migrations';
+import { buildDatabaseStatus, DatabaseStatus } from './status';
 
 export interface UserRow {
   id: number;
@@ -150,8 +151,6 @@ export function closeDatabase(): void {
   }
   databaseReady = false;
 }
-
-import { buildDatabaseStatus, DatabaseStatus } from './status';
 
 export type { DatabaseStatus };
 
