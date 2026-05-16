@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Box, Button, TextField, Typography, Container, Paper } from '@mui/material';
 import axios from 'axios';
@@ -9,7 +9,7 @@ function Login({ setToken }: { setToken: (token: string) => void }) {
   const [password, setPassword] = useState('');
   const navigate = useNavigate();
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     try {
       const response = await axios.post(`${API_URL}/auth/login`, {
