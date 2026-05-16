@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
 import bcrypt from 'bcryptjs';
-import { getDb, persistDatabase } from '../database';
+import { getDatabase, persistDatabase } from '../database';
 import { authMiddleware, signToken } from '../middleware/auth';
 import { AuthRequest } from '../types/auth';
 
@@ -8,10 +8,10 @@ const router = Router();
 
 router.post('/register', async (req: AuthRequest, res: Response) => {
   try {
-    const { email, password } = req.body;
+    const { username, email, password } = req.body;
 
-    if (!email || !password) {
-      res.status(400).json({ error: 'Email and password are required' });
+    if (!username || !email || !password) {
+      res.status(400).json({ error: 'Username, email and password are required' });
       return;
     }
 
@@ -20,20 +20,22 @@ router.post('/register', async (req: AuthRequest, res: Response) => {
       return;
     }
 
-    const database = getDb();
+    const database = getDatabase();
     const existing = database
-      .prepare('SELECT id FROM users WHERE email = ?')
-      .get(email);
+      .prepare('SELECT id FROM users WHERE email = ? OR username = ?')
+      .get(email, username);
 
     if (existing) {
-      res.status(409).json({ error: 'Email already registered' });
+      res.status(409).json({ error: 'Email or username already registered' });
       return;
     }
 
     const passwordHash = await bcrypt.hash(password, 10);
     const result = database
-      .prepare('INSERT INTO users (email, password_hash) VALUES (?, ?)')
-      .run(email, passwordHash);
+      .prepare(
+        'INSERT INTO users (username, email, password, role) VALUES (?, ?, ?, ?)'
+      )
+      .run(username, email, passwordHash, 'user');
     persistDatabase();
 
     const token = signToken({
@@ -45,7 +47,9 @@ router.post('/register', async (req: AuthRequest, res: Response) => {
       token,
       user: {
         id: result.lastInsertRowid,
-        email
+        username,
+        email,
+        role: 'user'
       },
       message: 'User registered successfully'
     });
@@ -63,11 +67,19 @@ router.post('/login', async (req: AuthRequest, res: Response) => {
       return;
     }
 
-    const database = getDb();
+    const database = getDatabase();
     const user = database
-      .prepare('SELECT id, email, password_hash FROM users WHERE email = ?')
+      .prepare(
+        'SELECT id, username, email, password, role FROM users WHERE email = ?'
+      )
       .get(email) as
-      | { id: number; email: string; password_hash: string }
+      | {
+          id: number;
+          username: string;
+          email: string;
+          password: string;
+          role: string;
+        }
       | undefined;
 
     if (!user) {
@@ -75,7 +87,7 @@ router.post('/login', async (req: AuthRequest, res: Response) => {
       return;
     }
 
-    const valid = await bcrypt.compare(password, user.password_hash);
+    const valid = await bcrypt.compare(password, user.password);
     if (!valid) {
       res.status(401).json({ error: 'Invalid credentials' });
       return;
@@ -85,7 +97,12 @@ router.post('/login', async (req: AuthRequest, res: Response) => {
 
     res.json({
       token,
-      user: { id: user.id, email: user.email }
+      user: {
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        role: user.role
+      }
     });
   } catch {
     res.status(500).json({ error: 'Login failed' });
@@ -94,11 +111,19 @@ router.post('/login', async (req: AuthRequest, res: Response) => {
 
 router.get('/me', authMiddleware, (req: AuthRequest, res: Response) => {
   try {
-    const database = getDb();
+    const database = getDatabase();
     const user = database
-      .prepare('SELECT id, email, created_at FROM users WHERE id = ?')
+      .prepare(
+        'SELECT id, username, email, role, created_at FROM users WHERE id = ?'
+      )
       .get(req.user!.userId) as
-      | { id: number; email: string; created_at: string }
+      | {
+          id: number;
+          username: string;
+          email: string;
+          role: string;
+          created_at: string;
+        }
       | undefined;
 
     if (!user) {

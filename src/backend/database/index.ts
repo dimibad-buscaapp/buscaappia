@@ -1,11 +1,14 @@
 import initSqlJs, { Database as SqlDatabase, SqlValue } from 'sql.js';
 import fs from 'fs';
 import path from 'path';
+import { runMigrations } from './migrations';
 
 export interface UserRow {
   id: number;
+  username: string;
   email: string;
-  password_hash: string;
+  password: string;
+  role: string;
   created_at: string;
 }
 
@@ -35,7 +38,9 @@ class Statement {
 
   run(...params: SqlValue[]): StmtResult {
     this.db.run(this.sql, params);
-    const row = this.db.exec('SELECT last_insert_rowid() AS id, changes() AS changes')[0];
+    const row = this.db.exec(
+      'SELECT last_insert_rowid() AS id, changes() AS changes'
+    )[0];
     return {
       lastInsertRowid: Number(row?.values[0]?.[0] ?? 0),
       changes: Number(row?.values[0]?.[1] ?? 0)
@@ -53,6 +58,18 @@ class DbClient {
     return new Statement(this.db, sql);
   }
 
+  exec(sql: string): void {
+    this.db.run(sql);
+  }
+
+  pragma(statement: string): void {
+    this.db.run(`PRAGMA ${statement}`);
+  }
+
+  getRaw(): SqlDatabase {
+    return this.db;
+  }
+
   persist(): void {
     const data = this.db.export();
     fs.writeFileSync(this.dbPath, Buffer.from(data));
@@ -60,6 +77,7 @@ class DbClient {
 }
 
 let client: DbClient | null = null;
+let resolvedDbPath = '';
 
 function resolveDbPath(): string {
   const url = process.env.DATABASE_URL || 'sqlite://./database.sqlite';
@@ -70,6 +88,11 @@ function resolveDbPath(): string {
     : path.resolve(process.cwd(), dbPath);
 }
 
+/** Compatível com o Prompt 4: getDatabase() */
+export function getDatabase(): DbClient {
+  return getDb();
+}
+
 export function getDb(): DbClient {
   if (!client) {
     throw new Error('Database not initialized. Call setupDatabase() first.');
@@ -77,9 +100,13 @@ export function getDb(): DbClient {
   return client;
 }
 
-export async function setupDatabase(): Promise<void> {
-  const resolvedPath = resolveDbPath();
-  const dir = path.dirname(resolvedPath);
+export function getDbPath(): string {
+  return resolvedDbPath;
+}
+
+export async function setupDatabase(): Promise<DbClient> {
+  resolvedDbPath = resolveDbPath();
+  const dir = path.dirname(resolvedDbPath);
 
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
@@ -87,26 +114,20 @@ export async function setupDatabase(): Promise<void> {
 
   const SQL = await initSqlJs();
 
-  const db = fs.existsSync(resolvedPath)
-    ? new SQL.Database(fs.readFileSync(resolvedPath))
+  const db = fs.existsSync(resolvedDbPath)
+    ? new SQL.Database(fs.readFileSync(resolvedDbPath))
     : new SQL.Database();
 
-  db.run(`
-    CREATE TABLE IF NOT EXISTS users (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      email TEXT UNIQUE NOT NULL,
-      password_hash TEXT NOT NULL,
-      created_at TEXT DEFAULT (datetime('now'))
-    );
-  `);
-  db.run(`
-    CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
-  `);
+  client = new DbClient(db, resolvedDbPath);
+  client.pragma('journal_mode = WAL');
 
-  client = new DbClient(db, resolvedPath);
+  runMigrations(db);
   client.persist();
 
-  console.log(`Database ready: ${resolvedPath}`);
+  console.log('✅ Database setup complete');
+  console.log(`   Path: ${resolvedDbPath}`);
+
+  return client;
 }
 
 export function persistDatabase(): void {
@@ -118,4 +139,15 @@ export function closeDatabase(): void {
     client.persist();
     client = null;
   }
+}
+
+import { buildDatabaseStatus, DatabaseStatus } from './status';
+
+export type { DatabaseStatus };
+
+export function getDatabaseStatus(): DatabaseStatus {
+  if (!client) {
+    throw new Error('Database not initialized');
+  }
+  return buildDatabaseStatus(client.getRaw(), resolvedDbPath);
 }

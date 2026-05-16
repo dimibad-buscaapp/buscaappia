@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import { setupDatabase } from './database';
+import { setupDatabase, getDatabaseStatus } from './database';
 import authRoutes from './routes/auth';
 
 dotenv.config();
@@ -19,11 +19,22 @@ app.use('/api/auth', authRoutes);
 
 // Rota de teste
 app.get('/api/health', (req, res) => {
-  res.json({
-    status: 'online',
-    message: 'DevUnifiedTool API running',
-    timestamp: new Date().toISOString()
-  });
+  try {
+    const database = getDatabaseStatus();
+    res.json({
+      status: 'online',
+      message: 'DevUnifiedTool API running',
+      timestamp: new Date().toISOString(),
+      database
+    });
+  } catch {
+    res.json({
+      status: 'online',
+      message: 'DevUnifiedTool API running',
+      timestamp: new Date().toISOString(),
+      database: { connected: false }
+    });
+  }
 });
 
 // Inicialização
