@@ -113,7 +113,7 @@ function Dashboard({ setToken }: DashboardProps) {
 
   return (
     <Box sx={{ display: 'flex' }}>
-      <AppBar position="fixed" sx={{ zIndex: (theme) => theme.zIndex.drawer + 1 }}>
+      <AppBar position="fixed" sx={{ zIndex: 1201 }}>
         <Toolbar>
           <IconButton color="inherit" edge="start" sx={{ mr: 1 }}>
             <MenuIcon />
@@ -275,10 +275,13 @@ function Dashboard({ setToken }: DashboardProps) {
         <Box
           sx={{
             width: 350,
+            borderLeft: '1px solid',
+            borderColor: 'divider',
             position: 'fixed',
             right: 0,
             top: 0,
             bottom: 0,
+            marginTop: '64px',
             zIndex: 1200
           }}
         >
@@ -309,10 +312,10 @@ function Dashboard({ setToken }: DashboardProps) {
                 setNewProject({ ...newProject, type: e.target.value })
               }
             >
-              <MenuItem value="web">Desenvolvimento Web</MenuItem>
-              <MenuItem value="apk">App Android (.apk)</MenuItem>
-              <MenuItem value="exe">Programa Windows (.exe)</MenuItem>
-              <MenuItem value="apk_editor">Editor de APK</MenuItem>
+              <MenuItem value="web">🌐 Desenvolvimento Web</MenuItem>
+              <MenuItem value="apk">📱 App Android (.apk)</MenuItem>
+              <MenuItem value="exe">💻 Programa Windows (.exe)</MenuItem>
+              <MenuItem value="apk_editor">🔧 Editor de APK</MenuItem>
             </Select>
           </FormControl>
           <Button
