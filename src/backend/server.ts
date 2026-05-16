@@ -44,6 +44,12 @@ app.get('/api/health', (req, res) => {
 async function start() {
   try {
     await setupDatabase();
+    console.log('✅ Auth system ready');
+    console.log('   POST /api/auth/register');
+    console.log('   POST /api/auth/login');
+    console.log('   GET  /api/auth/me');
+    console.log('   POST /api/auth/verify');
+
     app.listen(PORT, () => {
       console.log(`🚀 Server running on http://localhost:${PORT}`);
       console.log(`📁 Health check: http://localhost:${PORT}/api/health`);

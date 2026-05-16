@@ -1,7 +1,10 @@
 import { Router, Response } from 'express';
-import bcrypt from 'bcryptjs';
-import { getDatabase, persistDatabase } from '../database';
-import { authMiddleware, signToken } from '../middleware/auth';
+import { authMiddleware } from '../middleware/auth';
+import {
+  loginUser,
+  registerUser,
+  verifyTokenPayload
+} from '../services/auth.service';
 import { AuthRequest } from '../types/auth';
 
 const router = Router();
@@ -9,122 +12,60 @@ const router = Router();
 router.post('/register', async (req: AuthRequest, res: Response) => {
   try {
     const { username, email, password } = req.body;
+    const result = await registerUser({ username, email, password });
 
-    if (!username || !email || !password) {
-      res.status(400).json({ error: 'Username, email and password are required' });
-      return;
-    }
+    res.status(201).json({
+      ...result,
+      message: 'User registered successfully'
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Registration failed';
 
-    if (password.length < 6) {
-      res.status(400).json({ error: 'Password must be at least 6 characters' });
-      return;
-    }
-
-    const database = getDatabase();
-    const existing = database
-      .prepare('SELECT id FROM users WHERE email = ? OR username = ?')
-      .get(email, username);
-
-    if (existing) {
+    if (message === 'EMAIL_OR_USERNAME_TAKEN') {
       res.status(409).json({ error: 'Email or username already registered' });
       return;
     }
 
-    const passwordHash = await bcrypt.hash(password, 10);
-    const result = database
-      .prepare(
-        'INSERT INTO users (username, email, password, role) VALUES (?, ?, ?, ?)'
-      )
-      .run(username, email, passwordHash, 'user');
-    persistDatabase();
+    if (
+      message.includes('Username') ||
+      message.includes('email') ||
+      message.includes('Password')
+    ) {
+      res.status(400).json({ error: message });
+      return;
+    }
 
-    const token = signToken({
-      userId: Number(result.lastInsertRowid),
-      email
-    });
-
-    res.status(201).json({
-      token,
-      user: {
-        id: result.lastInsertRowid,
-        username,
-        email,
-        role: 'user'
-      },
-      message: 'User registered successfully'
-    });
-  } catch {
     res.status(500).json({ error: 'Registration failed' });
   }
 });
 
 router.post('/login', async (req: AuthRequest, res: Response) => {
   try {
-    const { email, password } = req.body;
+    const { email, username, login, password } = req.body;
+    const identifier = login || email || username;
 
-    if (!email || !password) {
-      res.status(400).json({ error: 'Email and password are required' });
-      return;
-    }
+    const result = await loginUser({ login: identifier, password });
+    res.json(result);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Login failed';
 
-    const database = getDatabase();
-    const user = database
-      .prepare(
-        'SELECT id, username, email, password, role FROM users WHERE email = ?'
-      )
-      .get(email) as
-      | {
-          id: number;
-          username: string;
-          email: string;
-          password: string;
-          role: string;
-        }
-      | undefined;
-
-    if (!user) {
+    if (message === 'INVALID_CREDENTIALS') {
       res.status(401).json({ error: 'Invalid credentials' });
       return;
     }
 
-    const valid = await bcrypt.compare(password, user.password);
-    if (!valid) {
-      res.status(401).json({ error: 'Invalid credentials' });
+    if (message.includes('required')) {
+      res.status(400).json({ error: message });
       return;
     }
 
-    const token = signToken({ userId: user.id, email: user.email });
-
-    res.json({
-      token,
-      user: {
-        id: user.id,
-        username: user.username,
-        email: user.email,
-        role: user.role
-      }
-    });
-  } catch {
     res.status(500).json({ error: 'Login failed' });
   }
 });
 
 router.get('/me', authMiddleware, (req: AuthRequest, res: Response) => {
   try {
-    const database = getDatabase();
-    const user = database
-      .prepare(
-        'SELECT id, username, email, role, created_at FROM users WHERE id = ?'
-      )
-      .get(req.user!.userId) as
-      | {
-          id: number;
-          username: string;
-          email: string;
-          role: string;
-          created_at: string;
-        }
-      | undefined;
+    const user = verifyTokenPayload(req.user!);
 
     if (!user) {
       res.status(404).json({ error: 'User not found' });
@@ -134,6 +75,21 @@ router.get('/me', authMiddleware, (req: AuthRequest, res: Response) => {
     res.json({ user });
   } catch {
     res.status(500).json({ error: 'Failed to fetch user' });
+  }
+});
+
+router.post('/verify', authMiddleware, (req: AuthRequest, res: Response) => {
+  try {
+    const user = verifyTokenPayload(req.user!);
+
+    if (!user) {
+      res.status(404).json({ valid: false, error: 'User not found' });
+      return;
+    }
+
+    res.json({ valid: true, user });
+  } catch {
+    res.status(500).json({ error: 'Token verification failed' });
   }
 });
 
