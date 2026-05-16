@@ -47,6 +47,20 @@ class Statement {
       changes: Number(row?.values[0]?.[1] ?? 0)
     };
   }
+
+  all(...params: SqlValue[]): Record<string, unknown>[] {
+    const stmt = this.db.prepare(this.sql);
+    const rows: Record<string, unknown>[] = [];
+    try {
+      stmt.bind(params);
+      while (stmt.step()) {
+        rows.push(stmt.getAsObject() as Record<string, unknown>);
+      }
+    } finally {
+      stmt.free();
+    }
+    return rows;
+  }
 }
 
 class DbClient {

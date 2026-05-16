@@ -5,6 +5,8 @@ import fs from 'fs';
 import path from 'path';
 import { setupDatabase, getDatabaseStatus } from './database';
 import authRoutes from './routes/auth';
+import projectRoutes from './routes/projects';
+import chatRoutes from './routes/chat';
 
 dotenv.config();
 
@@ -35,6 +37,8 @@ app.use(express.urlencoded({ extended: true }));
 
 // API
 app.use('/api/auth', authRoutes);
+app.use('/api/projects', projectRoutes);
+app.use('/api/chat', chatRoutes);
 
 // Rota de teste
 app.get('/api/health', (req, res) => {
@@ -76,6 +80,8 @@ async function start() {
     console.log('✅ Auth system ready');
     console.log('   POST /api/auth/register');
     console.log('   POST /api/auth/login');
+    console.log('   GET  /api/projects');
+    console.log('   POST /api/chat');
 
     if (!fs.existsSync(path.join(publicDir, 'index.html'))) {
       console.warn(`⚠️ Frontend não encontrado em: ${publicDir}`);
