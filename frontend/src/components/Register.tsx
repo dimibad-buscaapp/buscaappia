@@ -9,6 +9,8 @@ import {
   TextField,
   Typography
 } from '@mui/material';
+import axios from 'axios';
+import { API_URL } from '../config/api';
 
 export default function Register() {
   const navigate = useNavigate();
@@ -26,16 +28,11 @@ export default function Register() {
     setLoading(true);
 
     try {
-      const res = await fetch('/api/auth/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, email, password })
+      const { data } = await axios.post(`${API_URL}/auth/register`, {
+        username,
+        email,
+        password
       });
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || 'Erro ao cadastrar');
-      }
 
       setSuccess(data.message || 'Usuário criado com sucesso');
       setTimeout(() => navigate('/login'), 1500);
