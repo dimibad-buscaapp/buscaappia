@@ -1,95 +1,94 @@
-import { Router, Response } from 'express';
-import { authMiddleware } from '../middleware/auth';
-import {
-  loginUser,
-  registerUser,
-  verifyTokenPayload
-} from '../services/auth.service';
-import { AuthRequest } from '../types/auth';
+import { Router, Request, Response } from 'express';
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
+import { getDatabase, persistDatabase } from '../database';
 
 const router = Router();
 
-router.post('/register', async (req: AuthRequest, res: Response) => {
+interface UserRow {
+  id: number;
+  username: string;
+  email: string;
+  password: string;
+  role: string;
+}
+
+function getJwtSecret(): string {
+  return process.env.JWT_SECRET || 'default_secret';
+}
+
+// Registro
+router.post('/register', async (req: Request, res: Response) => {
   try {
     const { username, email, password } = req.body;
-    const result = await registerUser({ username, email, password });
+    const db = getDatabase();
+
+    const existingUser = db
+      .prepare('SELECT id FROM users WHERE email = ? OR username = ?')
+      .get(email, username);
+
+    if (existingUser) {
+      res.status(400).json({ error: 'Usuário ou email já existe' });
+      return;
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const result = db
+      .prepare(
+        'INSERT INTO users (username, email, password) VALUES (?, ?, ?)'
+      )
+      .run(username, email, hashedPassword);
+
+    persistDatabase();
 
     res.status(201).json({
-      ...result,
-      message: 'User registered successfully'
+      message: 'Usuário criado com sucesso',
+      userId: result.lastInsertRowid
     });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Registration failed';
-
-    if (message === 'EMAIL_OR_USERNAME_TAKEN') {
-      res.status(409).json({ error: 'Email or username already registered' });
-      return;
-    }
-
-    if (
-      message.includes('Username') ||
-      message.includes('email') ||
-      message.includes('Password')
-    ) {
-      res.status(400).json({ error: message });
-      return;
-    }
-
-    res.status(500).json({ error: 'Registration failed' });
+  } catch {
+    res.status(500).json({ error: 'Erro ao criar usuário' });
   }
 });
 
-router.post('/login', async (req: AuthRequest, res: Response) => {
+// Login
+router.post('/login', async (req: Request, res: Response) => {
   try {
-    const { email, username, login, password } = req.body;
-    const identifier = login || email || username;
+    const { email, password } = req.body;
+    const db = getDatabase();
 
-    const result = await loginUser({ login: identifier, password });
-    res.json(result);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Login failed';
-
-    if (message === 'INVALID_CREDENTIALS') {
-      res.status(401).json({ error: 'Invalid credentials' });
-      return;
-    }
-
-    if (message.includes('required')) {
-      res.status(400).json({ error: message });
-      return;
-    }
-
-    res.status(500).json({ error: 'Login failed' });
-  }
-});
-
-router.get('/me', authMiddleware, (req: AuthRequest, res: Response) => {
-  try {
-    const user = verifyTokenPayload(req.user!);
+    const user = db
+      .prepare('SELECT * FROM users WHERE email = ?')
+      .get(email) as UserRow | undefined;
 
     if (!user) {
-      res.status(404).json({ error: 'User not found' });
+      res.status(401).json({ error: 'Credenciais inválidas' });
       return;
     }
 
-    res.json({ user });
-  } catch {
-    res.status(500).json({ error: 'Failed to fetch user' });
-  }
-});
-
-router.post('/verify', authMiddleware, (req: AuthRequest, res: Response) => {
-  try {
-    const user = verifyTokenPayload(req.user!);
-
-    if (!user) {
-      res.status(404).json({ valid: false, error: 'User not found' });
+    const validPassword = await bcrypt.compare(password, user.password);
+    if (!validPassword) {
+      res.status(401).json({ error: 'Credenciais inválidas' });
       return;
     }
 
-    res.json({ valid: true, user });
+    const token = jwt.sign(
+      { userId: user.id, role: user.role },
+      getJwtSecret(),
+      { expiresIn: '24h' }
+    );
+
+    res.json({
+      token,
+      user: {
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        role: user.role
+      }
+    });
   } catch {
-    res.status(500).json({ error: 'Token verification failed' });
+    res.status(500).json({ error: 'Erro ao fazer login' });
   }
 });
 
