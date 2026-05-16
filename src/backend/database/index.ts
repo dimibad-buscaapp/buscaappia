@@ -78,6 +78,7 @@ class DbClient {
 
 let client: DbClient | null = null;
 let resolvedDbPath = '';
+let databaseReady = false;
 
 function resolveDbPath(): string {
   const url = process.env.DATABASE_URL || 'sqlite://./database.sqlite';
@@ -121,8 +122,16 @@ export async function setupDatabase(): Promise<DbClient> {
   client = new DbClient(db, resolvedDbPath);
   client.pragma('journal_mode = WAL');
 
-  runMigrations(db);
+  try {
+    runMigrations(db);
+  } catch (error) {
+    client = null;
+    databaseReady = false;
+    throw error;
+  }
+
   client.persist();
+  databaseReady = true;
 
   console.log('✅ Database setup complete');
   console.log(`   Path: ${resolvedDbPath}`);
@@ -139,14 +148,19 @@ export function closeDatabase(): void {
     client.persist();
     client = null;
   }
+  databaseReady = false;
 }
 
 import { buildDatabaseStatus, DatabaseStatus } from './status';
 
 export type { DatabaseStatus };
 
+export function isDatabaseReady(): boolean {
+  return databaseReady && client !== null;
+}
+
 export function getDatabaseStatus(): DatabaseStatus {
-  if (!client) {
+  if (!client || !databaseReady) {
     throw new Error('Database not initialized');
   }
   return buildDatabaseStatus(client.getRaw(), resolvedDbPath);

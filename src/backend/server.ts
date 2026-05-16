@@ -27,12 +27,15 @@ app.get('/api/health', (req, res) => {
       timestamp: new Date().toISOString(),
       database
     });
-  } catch {
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : 'Database check failed';
+    console.error('[health] Database unavailable:', message);
     res.json({
       status: 'online',
       message: 'DevUnifiedTool API running',
       timestamp: new Date().toISOString(),
-      database: { connected: false }
+      database: { connected: false, error: message }
     });
   }
 });

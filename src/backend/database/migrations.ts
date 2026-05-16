@@ -51,11 +51,21 @@ function dropDeprecatedTables(db: SqlDatabase): void {
 
 export function runMigrations(db: SqlDatabase): void {
   for (const sql of SCHEMA_STATEMENTS) {
-    db.run(sql);
+    try {
+      db.run(sql);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      throw new Error(`Migration failed: ${msg}`);
+    }
   }
 
-  migrateLegacyUsers(db);
-  dropDeprecatedTables(db);
+  try {
+    migrateLegacyUsers(db);
+    dropDeprecatedTables(db);
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    throw new Error(`Legacy migration failed: ${msg}`);
+  }
 
   for (const migration of MIGRATIONS) {
     const exists = db.prepare(

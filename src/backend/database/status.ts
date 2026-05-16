@@ -25,11 +25,16 @@ export function buildDatabaseStatus(
     }
   };
 
-  const migrationsResult = db.exec(
-    'SELECT version FROM schema_migrations ORDER BY version'
-  );
-  const migrations =
-    migrationsResult[0]?.values.map((row) => Number(row[0])) ?? [];
+  let migrations: number[] = [];
+  try {
+    const migrationsResult = db.exec(
+      'SELECT version FROM schema_migrations ORDER BY version'
+    );
+    migrations =
+      migrationsResult[0]?.values.map((row) => Number(row[0])) ?? [];
+  } catch {
+    migrations = [];
+  }
 
   return {
     connected: true,
