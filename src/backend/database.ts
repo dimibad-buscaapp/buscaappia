@@ -1,4 +1,4 @@
-import Database from 'better-sqlite3';
+import initSqlJs, { Database as SqlDatabase } from 'sql.js';
 import fs from 'fs';
 import path from 'path';
 
@@ -9,7 +9,57 @@ export interface UserRow {
   created_at: string;
 }
 
-let db: Database.Database | null = null;
+interface StmtResult {
+  lastInsertRowid: number;
+  changes: number;
+}
+
+class Statement {
+  constructor(
+    private db: SqlDatabase,
+    private sql: string
+  ) {}
+
+  get(...params: unknown[]): Record<string, unknown> | undefined {
+    const stmt = this.db.prepare(this.sql);
+    try {
+      stmt.bind(params);
+      if (stmt.step()) {
+        return stmt.getAsObject() as Record<string, unknown>;
+      }
+      return undefined;
+    } finally {
+      stmt.free();
+    }
+  }
+
+  run(...params: unknown[]): StmtResult {
+    this.db.run(this.sql, params as initSqlJs.BindParams);
+    const row = this.db.exec('SELECT last_insert_rowid() AS id, changes() AS changes')[0];
+    return {
+      lastInsertRowid: Number(row?.values[0]?.[0] ?? 0),
+      changes: Number(row?.values[0]?.[1] ?? 0)
+    };
+  }
+}
+
+class DbClient {
+  constructor(
+    private db: SqlDatabase,
+    private dbPath: string
+  ) {}
+
+  prepare(sql: string): Statement {
+    return new Statement(this.db, sql);
+  }
+
+  persist(): void {
+    const data = this.db.export();
+    fs.writeFileSync(this.dbPath, Buffer.from(data));
+  }
+}
+
+let client: DbClient | null = null;
 
 function resolveDbPath(): string {
   const url = process.env.DATABASE_URL || 'sqlite://./database.sqlite';
@@ -20,11 +70,11 @@ function resolveDbPath(): string {
     : path.resolve(process.cwd(), dbPath);
 }
 
-export function getDb(): Database.Database {
-  if (!db) {
+export function getDb(): DbClient {
+  if (!client) {
     throw new Error('Database not initialized. Call setupDatabase() first.');
   }
-  return db;
+  return client;
 }
 
 export async function setupDatabase(): Promise<void> {
@@ -35,28 +85,37 @@ export async function setupDatabase(): Promise<void> {
     fs.mkdirSync(dir, { recursive: true });
   }
 
-  db = new Database(resolvedPath);
+  const SQL = await initSqlJs();
 
-  db.pragma('journal_mode = WAL');
-  db.pragma('foreign_keys = ON');
+  const db = fs.existsSync(resolvedPath)
+    ? new SQL.Database(fs.readFileSync(resolvedPath))
+    : new SQL.Database();
 
-  db.exec(`
+  db.run(`
     CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       email TEXT UNIQUE NOT NULL,
       password_hash TEXT NOT NULL,
       created_at TEXT DEFAULT (datetime('now'))
     );
-
+  `);
+  db.run(`
     CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
   `);
+
+  client = new DbClient(db, resolvedPath);
+  client.persist();
 
   console.log(`Database ready: ${resolvedPath}`);
 }
 
+export function persistDatabase(): void {
+  client?.persist();
+}
+
 export function closeDatabase(): void {
-  if (db) {
-    db.close();
-    db = null;
+  if (client) {
+    client.persist();
+    client = null;
   }
 }

@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
 import bcrypt from 'bcryptjs';
-import { getDb } from '../database';
+import { getDb, persistDatabase } from '../database';
 import { authMiddleware, signToken } from '../middleware/auth';
 import { AuthRequest } from '../types/auth';
 
@@ -34,6 +34,7 @@ router.post('/register', async (req: AuthRequest, res: Response) => {
     const result = database
       .prepare('INSERT INTO users (email, password_hash) VALUES (?, ?)')
       .run(email, passwordHash);
+    persistDatabase();
 
     const token = signToken({
       userId: Number(result.lastInsertRowid),
