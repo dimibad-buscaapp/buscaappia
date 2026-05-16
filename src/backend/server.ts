@@ -59,9 +59,13 @@ app.get('/api/health', (req, res) => {
   }
 });
 
-// Frontend estático (antes do listen)
+// Frontend React (build em public/)
 app.use(express.static(publicDir));
-app.get('/', (_req, res) => {
+app.get(/^\/(?!api).*/, (req, res, next) => {
+  if (req.method !== 'GET') {
+    next();
+    return;
+  }
   res.sendFile(path.join(publicDir, 'index.html'));
 });
 

@@ -1,4 +1,9 @@
 node_modules
+frontend/node_modules
+frontend/dist
+frontend/**/*.js
+!frontend/vite.config.ts
+frontend/tsconfig.tsbuildinfo
 .env
 *.apk
 extracted/*
