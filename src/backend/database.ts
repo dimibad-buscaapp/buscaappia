@@ -1,4 +1,4 @@
-import initSqlJs, { Database as SqlDatabase } from 'sql.js';
+import initSqlJs, { Database as SqlDatabase, SqlValue } from 'sql.js';
 import fs from 'fs';
 import path from 'path';
 
@@ -20,7 +20,7 @@ class Statement {
     private sql: string
   ) {}
 
-  get(...params: unknown[]): Record<string, unknown> | undefined {
+  get(...params: SqlValue[]): Record<string, unknown> | undefined {
     const stmt = this.db.prepare(this.sql);
     try {
       stmt.bind(params);
@@ -33,8 +33,8 @@ class Statement {
     }
   }
 
-  run(...params: unknown[]): StmtResult {
-    this.db.run(this.sql, params as initSqlJs.BindParams);
+  run(...params: SqlValue[]): StmtResult {
+    this.db.run(this.sql, params);
     const row = this.db.exec('SELECT last_insert_rowid() AS id, changes() AS changes')[0];
     return {
       lastInsertRowid: Number(row?.values[0]?.[0] ?? 0),
