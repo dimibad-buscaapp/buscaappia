@@ -1,0 +1,10 @@
+{
+  "project": "dev-unified-tool",
+  "repository": "https://github.com/dimibad-buscaapp/buscaappia.git",
+  "vps": {
+    "host": "108.181.169.40",
+    "sshPort": 1097,
+    "projectPath": "C:/Apps/BuscaapIA",
+    "apiPort": 3000
+  }
+}

@@ -1,0 +1,10 @@
+node_modules
+.env
+*.apk
+extracted/*
+dist
+build
+database.sqlite
+database.sqlite-*
+*.log
+.DS_Store
