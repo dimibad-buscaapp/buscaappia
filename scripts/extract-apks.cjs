@@ -15,16 +15,6 @@ const APKTOOL_PATH = path.join(TOOLS_FOLDER, 'apktool.jar');
 const APKTOOL_URL =
   'https://bitbucket.org/iBotPeaches/apktool/downloads/apktool_2.9.3.jar';
 
-const APKS = [
-  'AI Chat Premium V60 [Tekmods].apk',
-  'Chat Smith Premium v8.251013.1 [Tekmods].apk',
-  'ChatOn_1.70.564-638_@leidehmodds_[PREMIUM]_.apk',
-  'Copilot Pro v30.0.431015001 [Tekmods].apk',
-  'DreamFace V6.13.0 Mod.apk',
-  'Grok AI Mod v1.1.04.apk',
-  'Remover fundo de fotos Pro v2.292.90 [Tekmods].apk'
-];
-
 async function pathExists(targetPath) {
   try {
     await fsp.access(targetPath);
@@ -36,6 +26,33 @@ async function pathExists(targetPath) {
 
 async function ensureDir(dir) {
   await fsp.mkdir(dir, { recursive: true });
+}
+
+function sanitizeOutputName(fileName) {
+  return path
+    .basename(fileName, path.extname(fileName))
+    .replace(/[<>:"/\\|?*\x00-\x1F]/g, '_')
+    .trim();
+}
+
+async function discoverApks() {
+  const cliApks = process.argv
+    .slice(2)
+    .map((filePath) => path.resolve(filePath))
+    .filter((filePath) => filePath.toLowerCase().endsWith('.apk'));
+
+  if (cliApks.length > 0) {
+    return cliApks;
+  }
+
+  await ensureDir(APKS_FOLDER);
+
+  const entries = await fsp.readdir(APKS_FOLDER, { withFileTypes: true });
+  return entries
+    .filter(
+      (entry) => entry.isFile() && entry.name.toLowerCase().endsWith('.apk')
+    )
+    .map((entry) => path.join(APKS_FOLDER, entry.name));
 }
 
 function downloadFile(url, outputPath) {
@@ -90,9 +107,9 @@ async function checkDependencies() {
   return true;
 }
 
-async function extractAPK(apkName) {
-  const apkPath = path.join(APKS_FOLDER, apkName);
-  const outputDir = path.join(EXTRACTED_FOLDER, apkName.replace(/\.apk$/i, ''));
+async function extractAPK(apkPath) {
+  const apkName = path.basename(apkPath);
+  const outputDir = path.join(EXTRACTED_FOLDER, sanitizeOutputName(apkName));
 
   console.log(`\nExtracting: ${apkName}`);
 
@@ -241,18 +258,26 @@ async function findFiles(dir, extensions) {
 async function main() {
   console.log('Starting APK extraction...\n');
 
+  await ensureDir(APKS_FOLDER);
+  await ensureDir(EXTRACTED_FOLDER);
+
+  const apks = await discoverApks();
+  const results = [];
+
+  if (apks.length === 0) {
+    console.log(`No APK files found in: ${APKS_FOLDER}`);
+    console.log('Copy .apk files into that folder or pass paths directly:');
+    console.log('node scripts/extract-apks.cjs "C:\\path\\app.apk"');
+    return;
+  }
+
   const depsOk = await checkDependencies();
   if (!depsOk) {
     process.exitCode = 1;
     return;
   }
 
-  await ensureDir(APKS_FOLDER);
-  await ensureDir(EXTRACTED_FOLDER);
-
-  const results = [];
-
-  for (const apk of APKS) {
+  for (const apk of apks) {
     const result = await extractAPK(apk);
     if (result) {
       results.push(result);
@@ -260,9 +285,9 @@ async function main() {
   }
 
   const summary = {
-    total_apks: APKS.length,
+    total_apks: apks.length,
     extracted: results.length,
-    failed: APKS.length - results.length,
+    failed: apks.length - results.length,
     apks: results,
     timestamp: new Date().toISOString()
   };
@@ -274,7 +299,7 @@ async function main() {
   );
 
   console.log('\nSummary:');
-  console.log(`Extracted: ${results.length}/${APKS.length}`);
+  console.log(`Extracted: ${results.length}/${apks.length}`);
   console.log(`Output folder: ${EXTRACTED_FOLDER}`);
 }
 
