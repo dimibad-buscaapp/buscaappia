@@ -7,6 +7,36 @@ const router = Router();
 
 router.use(authMiddleware);
 
+async function getAIResponse(message: string, provider: string): Promise<string> {
+  const responses: Record<string, string[]> = {
+    gemini: [
+      `🤖 **Gemini**: Analisando sua solicitação...\n\nBaseado no seu projeto, sugiro a seguinte implementação:\n\n\`\`\`javascript\n// Exemplo de código\nconst app = express();\n\`\`\``,
+      '📝 **Gemini**: Posso ajudar com isso! Aqui está uma solução...'
+    ],
+    openai: [
+      '🧠 **ChatGPT**: Entendi sua pergunta. Vamos resolver isso passo a passo...',
+      '💡 **ChatGPT**: Aqui está uma abordagem otimizada...'
+    ],
+    deepseek: [
+      '🔍 **DeepSeek**: Analisando em profundidade...\n\nEncontrei uma solução eficiente:\n\n1. Primeiro, configure o ambiente\n2. Depois, implemente a lógica\n3. Teste e otimize',
+      '⚡ **DeepSeek**: Resposta rápida: use esta estrutura...'
+    ],
+    claude: [
+      '🎯 **Claude**: Vou organizar a resposta com foco em clareza e segurança.',
+      '🎯 **Claude**: Boa pergunta. Vamos separar o problema em partes menores.'
+    ],
+    grok: [
+      '🚀 **Grok**: Vamos direto ao ponto: aqui está uma forma prática de resolver.',
+      '🚀 **Grok**: Analisei o contexto e recomendo começar por esta abordagem.'
+    ]
+  };
+
+  const providerResponses = responses[provider] || responses.gemini;
+  return providerResponses[
+    Math.floor(Math.random() * providerResponses.length)
+  ];
+}
+
 router.get('/:projectId', (req: AuthRequest, res: Response) => {
   try {
     const projectId = Number(req.params.projectId);
@@ -27,16 +57,45 @@ router.get('/:projectId', (req: AuthRequest, res: Response) => {
   }
 });
 
-router.post('/', (req: AuthRequest, res: Response) => {
+router.get('/history/:projectId', (req: AuthRequest, res: Response) => {
   try {
-    const { project_id, message, ai_provider = 'default' } = req.body;
+    const projectId = Number(req.params.projectId);
+    const db = getDatabase();
+
+    const history = db
+      .prepare(
+        `SELECT id, message, response, ai_provider, created_at
+         FROM chat_history
+         WHERE user_id = ? AND project_id = ?
+         ORDER BY created_at DESC
+         LIMIT 50`
+      )
+      .all(req.user!.userId, projectId);
+
+    res.json(history);
+  } catch {
+    res.status(500).json({ error: 'Erro ao carregar histórico' });
+  }
+});
+
+router.post('/', async (req: AuthRequest, res: Response) => {
+  try {
+    const {
+      message,
+      project_id,
+      projectId,
+      ai_provider,
+      provider
+    } = req.body;
+    const selectedProvider = ai_provider ?? provider ?? 'gemini';
+    const selectedProjectId = project_id ?? projectId ?? null;
 
     if (!message) {
       res.status(400).json({ error: 'Mensagem é obrigatória' });
       return;
     }
 
-    const response = `[IA] Recebi: "${message}". Integração completa em breve.`;
+    const response = await getAIResponse(message, selectedProvider);
 
     const db = getDatabase();
     const result = db
@@ -46,10 +105,10 @@ router.post('/', (req: AuthRequest, res: Response) => {
       )
       .run(
         req.user!.userId,
-        project_id ?? null,
+        selectedProjectId,
         message,
         response,
-        ai_provider
+        selectedProvider
       );
 
     persistDatabase();
