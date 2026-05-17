@@ -2,12 +2,33 @@ import { Router, Response } from 'express';
 import { getDatabase, persistDatabase } from '../database';
 import { authMiddleware } from '../middleware/auth';
 import { AuthRequest } from '../types/auth';
+import { APK_CATALOG, ApkCatalogItem } from '../config/apkCatalog';
 
 const router = Router();
 
 router.use(authMiddleware);
 
-async function getAIResponse(message: string, provider: string): Promise<string> {
+function recommendApkForMessage(message: string): ApkCatalogItem {
+  const normalizedMessage = message.toLowerCase();
+
+  const ranked = APK_CATALOG.map((apk) => {
+    const score = apk.keywords.reduce((total, keyword) => {
+      return normalizedMessage.includes(keyword.toLowerCase())
+        ? total + keyword.length
+        : total;
+    }, 0);
+
+    return { apk, score };
+  }).sort((a, b) => b.score - a.score);
+
+  return ranked[0]?.score > 0 ? ranked[0].apk : APK_CATALOG[0];
+}
+
+async function getAIResponse(
+  message: string,
+  provider: string,
+  recommendedApk: ApkCatalogItem
+): Promise<string> {
   const responses: Record<string, string[]> = {
     gemini: [
       `🤖 **Gemini**: Analisando sua solicitação...\n\nBaseado no seu projeto, sugiro a seguinte implementação:\n\n\`\`\`javascript\n// Exemplo de código\nconst app = express();\n\`\`\``,
@@ -32,30 +53,12 @@ async function getAIResponse(message: string, provider: string): Promise<string>
   };
 
   const providerResponses = responses[provider] || responses.gemini;
-  return providerResponses[
+  const baseResponse = providerResponses[
     Math.floor(Math.random() * providerResponses.length)
   ];
+
+  return `${baseResponse}\n\n📦 **App mais indicado para fornecer material:** ${recommendedApk.name}\n\nUso recomendado: ${recommendedApk.materialUse}\n\nPasta base: extracted/${recommendedApk.extractedFolder}`;
 }
-
-router.get('/:projectId', (req: AuthRequest, res: Response) => {
-  try {
-    const projectId = Number(req.params.projectId);
-    const db = getDatabase();
-
-    const messages = db
-      .prepare(
-        `SELECT id, message, response, ai_provider, created_at
-         FROM chat_history
-         WHERE user_id = ? AND project_id = ?
-         ORDER BY created_at ASC`
-      )
-      .all(req.user!.userId, projectId);
-
-    res.json(messages);
-  } catch {
-    res.status(500).json({ error: 'Erro ao carregar chat' });
-  }
-});
 
 router.get('/history/:projectId', (req: AuthRequest, res: Response) => {
   try {
@@ -78,6 +81,26 @@ router.get('/history/:projectId', (req: AuthRequest, res: Response) => {
   }
 });
 
+router.get('/:projectId', (req: AuthRequest, res: Response) => {
+  try {
+    const projectId = Number(req.params.projectId);
+    const db = getDatabase();
+
+    const messages = db
+      .prepare(
+        `SELECT id, message, response, ai_provider, created_at
+         FROM chat_history
+         WHERE user_id = ? AND project_id = ?
+         ORDER BY created_at ASC`
+      )
+      .all(req.user!.userId, projectId);
+
+    res.json(messages);
+  } catch {
+    res.status(500).json({ error: 'Erro ao carregar chat' });
+  }
+});
+
 router.post('/', async (req: AuthRequest, res: Response) => {
   try {
     const {
@@ -95,7 +118,12 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       return;
     }
 
-    const response = await getAIResponse(message, selectedProvider);
+    const recommendedApk = recommendApkForMessage(message);
+    const response = await getAIResponse(
+      message,
+      selectedProvider,
+      recommendedApk
+    );
 
     const db = getDatabase();
     const result = db

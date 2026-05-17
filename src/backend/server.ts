@@ -7,6 +7,7 @@ import { setupDatabase, getDatabaseStatus } from './database';
 import authRoutes from './routes/auth';
 import projectRoutes from './routes/projects';
 import chatRoutes from './routes/chat';
+import apkRoutes from './routes/apks';
 
 dotenv.config();
 
@@ -39,6 +40,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/api/auth', authRoutes);
 app.use('/api/projects', projectRoutes);
 app.use('/api/chat', chatRoutes);
+app.use('/api/apks', apkRoutes);
 
 // Rota de teste
 app.get('/api/health', (req, res) => {

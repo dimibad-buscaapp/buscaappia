@@ -46,8 +46,23 @@ interface DashboardProps {
   setToken: (token: string | null) => void;
 }
 
+interface ApkCatalogItem {
+  id: string;
+  name: string;
+  category: 'ai_chat' | 'image_tool' | 'assistant';
+  materialUse: string;
+  sourceExists: boolean;
+  extractedExists: boolean;
+  packageName: string | null;
+  layoutsCount: number;
+  assetsCount: number;
+  configsCount: number;
+  preserveModifiedState: boolean;
+}
+
 function Dashboard({ setToken }: DashboardProps) {
   const [projects, setProjects] = useState<Project[]>([]);
+  const [apks, setApks] = useState<ApkCatalogItem[]>([]);
   const [openNewProject, setOpenNewProject] = useState(false);
   const [newProject, setNewProject] = useState({ name: '', type: 'web' });
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
@@ -59,6 +74,7 @@ function Dashboard({ setToken }: DashboardProps) {
 
   useEffect(() => {
     loadProjects();
+    loadApks();
   }, []);
 
   const loadProjects = async () => {
@@ -78,6 +94,15 @@ function Dashboard({ setToken }: DashboardProps) {
       loadProjects();
     } catch {
       alert('Erro ao criar projeto');
+    }
+  };
+
+  const loadApks = async () => {
+    try {
+      const response = await axios.get(`${API_URL}/apks`, { headers });
+      setApks(response.data.apks ?? []);
+    } catch (error) {
+      console.error('Erro ao carregar APKs:', error);
     }
   };
 
@@ -110,6 +135,81 @@ function Dashboard({ setToken }: DashboardProps) {
     if (type === 'apk') return 'secondary';
     return 'default';
   };
+
+  const getApkCategoryLabel = (category: ApkCatalogItem['category']) => {
+    switch (category) {
+      case 'ai_chat':
+        return 'Chat IA';
+      case 'image_tool':
+        return 'Imagem';
+      case 'assistant':
+        return 'Assistente';
+      default:
+        return category;
+    }
+  };
+
+  const renderApkCatalog = () => (
+    <Box sx={{ mt: 4 }}>
+      <Typography variant="h5" gutterBottom>
+        APKs Modificados
+      </Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+        Catálogo preservado dos APKs descompactados para o chat sugerir o app
+        mais indicado como base de material.
+      </Typography>
+
+      <Grid container spacing={2}>
+        {apks.map((apk) => (
+          <Grid key={apk.id} size={{ xs: 12, sm: 6, md: 4 }}>
+            <Card sx={{ height: '100%' }}>
+              <CardContent>
+                <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                  <AndroidIcon color="secondary" sx={{ mr: 1 }} />
+                  <Typography variant="subtitle1" fontWeight={600}>
+                    {apk.name}
+                  </Typography>
+                </Box>
+                <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 1 }}>
+                  <Chip
+                    size="small"
+                    label={getApkCategoryLabel(apk.category)}
+                    color="secondary"
+                  />
+                  <Chip
+                    size="small"
+                    label={apk.extractedExists ? 'Extraído' : 'Pendente'}
+                    color={apk.extractedExists ? 'success' : 'default'}
+                  />
+                  <Chip size="small" label="Modificado" color="warning" />
+                </Box>
+                <Typography variant="body2" color="text.secondary">
+                  {apk.materialUse}
+                </Typography>
+                {apk.packageName && (
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    sx={{ display: 'block', mt: 1 }}
+                  >
+                    Package: {apk.packageName}
+                  </Typography>
+                )}
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  sx={{ display: 'block', mt: 0.5 }}
+                >
+                  Layouts: {apk.layoutsCount} | Assets: {apk.assetsCount} |
+                  Configs: {apk.configsCount}
+                </Typography>
+              </CardContent>
+            </Card>
+          </Grid>
+        ))}
+      </Grid>
+    </Box>
+  );
 
   return (
     <Box sx={{ display: 'flex' }}>
@@ -249,6 +349,8 @@ function Dashboard({ setToken }: DashboardProps) {
                 </Card>
               </Grid>
             </Grid>
+
+            {renderApkCatalog()}
           </Box>
         ) : (
           <Box sx={{ textAlign: 'center', mt: 10 }}>
@@ -267,6 +369,11 @@ function Dashboard({ setToken }: DashboardProps) {
             >
               Criar Primeiro Projeto
             </Button>
+            {apks.length > 0 && (
+              <Box sx={{ textAlign: 'left', mt: 6 }}>
+                {renderApkCatalog()}
+              </Box>
+            )}
           </Box>
         )}
       </Box>
